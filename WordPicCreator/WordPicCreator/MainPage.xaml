@@ -23,7 +23,7 @@
             <Setter Property="FontFamily" Value="/Fonts/VintageOne.ttf#VintageOne"/>
         </Style>
     </phone:PhoneApplicationPage.Resources>
-        <!--LayoutRoot is the root grid where all page content is placed-->
+    <!--LayoutRoot is the root grid where all page content is placed-->
     <Grid x:Name="LayoutRoot" Background="Transparent">
         <Grid.RowDefinitions>
             <!--<RowDefinition Height="Auto"/>-->
@@ -37,21 +37,27 @@
         </StackPanel>-->
 
         <!--ContentPanel - place additional content here-->
-        <Grid x:Name="ContentPanel" Grid.Row="0" Margin="12,0,12,0">
-            <ViewportControl x:Name="viewport"  
+        <Canvas x:Name="Cnvas">
+            <!--<Grid x:Name="ContentPanel" Grid.Row="0" Margin="12,0,12,0">-->
+            <!--<ViewportControl x:Name="viewport"  
                 ManipulationStarted="OnManipulationStarted" ManipulationDelta="OnManipulationDelta"  
-                             ManipulationCompleted="OnManipulationCompleted" ViewportChanged="viewport_ViewportChanged">
-                <Canvas x:Name="canvas" Height="500" Width="200">
-                    <Image x:Name="Img"  
+                             ManipulationCompleted="OnManipulationCompleted" ViewportChanged="viewport_ViewportChanged">-->
+                <!--<Canvas x:Name="canvas">-->
+            <!--<Viewbox Stretch="UniformToFill">-->
+            <!--<Grid x:Name="maingrid">-->
+                <Image x:Name="Img" 
                             RenderTransformOrigin="0,0" CacheMode="BitmapCache"
                            ImageOpened="OnImageOpened">
-                        <Image.RenderTransform>
-                            <ScaleTransform x:Name="xform"/>
-                        </Image.RenderTransform>
-                    </Image>
-                </Canvas>
-            </ViewportControl>
-        </Grid>
+                    <Image.RenderTransform>
+                        <ScaleTransform x:Name="xform"/>
+                    </Image.RenderTransform>
+                </Image>
+            <!--</Grid>-->
+            <!--</Viewbox>-->
+            <!--</Canvas>-->
+            <!--</ViewportControl>-->
+        </Canvas>
     </Grid>
+
 
 </phone:PhoneApplicationPage>

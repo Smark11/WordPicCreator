@@ -33,6 +33,7 @@ namespace WordPicCreator
         private int _widthOfPhoto;
         private int _heightOfPhoto;
         private bool _userHasSavedChanges = false;
+        private BitmapImage _originalImage = new BitmapImage();
 
         private double _leftOfTextBox;
 
@@ -55,9 +56,17 @@ namespace WordPicCreator
             //CnVas.Height = _screenHeight;
             //CnVas.Width = _screenWidth;
 
+            Cnvas.Height = _screenHeight;
+            Cnvas.Width = _screenWidth;
+            
+            Img.Height = _screenHeight;
+            Img.Width = _screenWidth;
+
+            //viewport.Height = _screenHeight;
+            //viewport.Width = _screenWidth;
+
+
             LoadPhotosFromLibrary();
-            Img.Tap += Img_Tap;
-            //canvas.Tap += CnVas_Tap;
             LayoutRoot.Tap += LayoutRoot_Tap;
 
 
@@ -65,52 +74,214 @@ namespace WordPicCreator
             //CnVas.ManipulationDelta += CnVas_ManipulationDelta;
             //Img.ManipulationStarted += Img_ManipulationStarted;
             //Img.ManipulationDelta += Img_ManipulationDelta;
+
+            Cnvas.ManipulationStarted += Cnvas_ManipulationStarted;
+            Cnvas.ManipulationDelta += Cnvas_ManipulationDelta;
         }
+
+        void Cnvas_ManipulationDelta(object sender, ManipulationDeltaEventArgs e)
+        {
+            e.Handled = false;
+        }
+
+        void Cnvas_ManipulationStarted(object sender, ManipulationStartedEventArgs e)
+        {
+            e.Handled = false;
+        }
+
+        #region textbox stuff
+
+        private int _textBoxNumber;
+        Dictionary<string, TextBoxInformation> _textBoxesOnScreen = new Dictionary<string, TextBoxInformation>();
 
         void LayoutRoot_Tap(object sender, System.Windows.Input.GestureEventArgs e)
         {
-            Point tappedAt = e.GetPosition(null);
-
-            double percentageY = tappedAt.Y / LayoutRoot.ActualHeight;
-            double percentageX = tappedAt.X / LayoutRoot.ActualWidth;
-
-            double width = canvas.Width;
-            double height = canvas.Height;
-
-            if (_textBoxesOnScreen.Count() == 0)
+            try
             {
+                Point tappedAt = e.GetPosition(null);
+
                 TextBox txtbox = GetNewTextBox();
 
-                _originX = _centerOfViewPort.X;
-                _originY = _centerOfViewPort.Y;
+                double percentageY = tappedAt.Y / LayoutRoot.ActualHeight;
+                double percentageX = tappedAt.X / LayoutRoot.ActualWidth;
 
-                Canvas.SetLeft(txtbox, _originX);
-                Canvas.SetTop(txtbox, _originY);
+                double width = Cnvas.Width;
+                double height = Cnvas.Height;
+
+                double ratio = Convert.ToDouble(_screenHeight) / Convert.ToDouble(_originalImage.PixelHeight);
+
+                double pictureHeight = Img.ActualHeight * ratio;
+
+                double topOfPicture = ((_screenHeight - pictureHeight) / 2) + 50;
+                double bottomOfPicture = (topOfPicture + pictureHeight) - (50 * 2);
 
 
-                txtbox.KeyDown += txtbox_KeyDown;
-                _textBoxesOnScreen.Add(txtbox);
-                canvas.Children.Add(txtbox);
+                if (tappedAt.Y < topOfPicture)
+                {
+                    return;
+                }
+
+                if (tappedAt.Y > bottomOfPicture)
+                {
+                    return;
+                }
+
+                _textBoxesOnScreen.Add("textbox" + _textBoxNumber, new TextBoxInformation(txtbox, tappedAt.X, tappedAt.Y));
+
+                Canvas.SetLeft(_textBoxesOnScreen["textbox" + _textBoxNumber].TextBoxControl, tappedAt.X);
+                Canvas.SetTop(_textBoxesOnScreen["textbox" + _textBoxNumber].TextBoxControl, tappedAt.Y);
+                
+                Cnvas.Children.Add(_textBoxesOnScreen["textbox" + _textBoxNumber].TextBoxControl);
 
                 txtbox.Focus();
+
+                _textBoxNumber += 1;
+            }
+            catch (Exception ex)
+            {
+
+            }
+        }
+
+        private TextBox GetNewTextBox()
+        {
+            TextBox returnValue = new TextBox();
+
+            returnValue.FontFamily = GetFontFamily();
+            returnValue.FontSize = GetFontSize();
+            returnValue.Foreground = GetFontColor();
+            returnValue.FontWeight = GetFontWeight();
+            returnValue.FontStyle = GetFontStyle();
+            returnValue.ManipulationDelta += returnValue_ManipulationDelta;
+            returnValue.TextWrapping = TextWrapping.Wrap;
+            returnValue.MaxWidth = _orientation == PageOrientation.Portrait ? _screenWidth - _leftOfTextBox : _screenHeight - _leftOfTextBox;
+            returnValue.LostFocus += returnValue_LostFocus;
+            returnValue.GotFocus += returnValue_GotFocus;
+            returnValue.Name = "textbox" + _textBoxNumber;
+            returnValue.KeyDown += txtbox_KeyDown;
+
+            return returnValue;
+        }
+
+        private void txtbox_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        {
+            if (e.Key == System.Windows.Input.Key.Enter)
+            {
+                this.Focus();
+            }
+            else
+            {
+                _deleteTextBlockButton.IsEnabled = true;
+            }
+        }
+
+
+        private void returnValue_LostFocus(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                List<TextBoxInformation> infoToRemove = new List<TextBoxInformation>();
+
+                if (_textBoxesOnScreen.Count() > 0)
+                {
+                    foreach (var row in _textBoxesOnScreen.Keys)
+                    {
+                        if (_textBoxesOnScreen[row].TextBoxControl.Text == string.Empty)
+                        {
+                            infoToRemove.Add(_textBoxesOnScreen[row]);
+                        }
+                    }
+
+                    foreach (var row in infoToRemove)
+                    {
+                        Cnvas.Children.Remove(row.TextBoxControl);
+                        _textBoxesOnScreen.Remove(row.TextBoxControl.Name);
+                    }
+                }
+
+                if (_textBoxesOnScreen.Count() > 0)
+                {
+                    _saveButton.IsEnabled = true;
+                }
+            }
+            catch (Exception ex)
+            {
+
             }
 
-
         }
+
+        private void ClearTextBoxes()
+        {
+            foreach (var row in _textBoxesOnScreen.Keys)
+            {
+                Cnvas.Children.Remove(_textBoxesOnScreen[row].TextBoxControl);
+            }
+
+            _textBoxesOnScreen.Clear();
+            _deleteTextBlockButton.IsEnabled = false;
+            _saveButton.IsEnabled = false;
+        }
+
+        void returnValue_ManipulationDelta(object sender, System.Windows.Input.ManipulationDeltaEventArgs e)
+        {
+            try
+            {
+                Point manOrigin = e.ManipulationOrigin;
+                TextBox txt = sender as TextBox;
+
+                double ratio = Convert.ToDouble(_screenHeight) / Convert.ToDouble(_originalImage.PixelHeight);
+
+                double pictureHeight = Img.ActualHeight * ratio;
+
+                double topOfPicture = ((_screenHeight - pictureHeight) / 2) + txt.ActualHeight;
+                double bottomOfPicture = (topOfPicture + pictureHeight) - (txt.ActualHeight * 2);
+
+                TextBoxInformation info = _textBoxesOnScreen[txt.Name];
+
+                //first adjust info origin X and origin Y so that we are tapping in the middle of the text box instead of the top left side.
+
+
+                //if (info.OriginY + manOrigin.Y < topOfPicture)
+                //{
+                //    return;
+                //}
+
+                //if (info.OriginY + manOrigin.Y > bottomOfPicture)
+                //{
+                //    return;
+                //}
+
+                info.OriginX = info.OriginX - (txt.ActualWidth / 2);
+                info.OriginY = info.OriginY - (txt.ActualHeight / 2);
+
+                Canvas.SetLeft(txt, info.OriginX + manOrigin.X);
+                Canvas.SetTop(txt, info.OriginY + manOrigin.Y);
+
+                _textBoxesOnScreen[txt.Name].OriginX += manOrigin.X;
+                _textBoxesOnScreen[txt.Name].OriginY += manOrigin.Y;
+            }
+            catch (Exception ex)
+            {
+
+            }
+        }
+
+        #endregion textbox stuff
 
         private void Img_Loaded()
         {
-            _bitmap = (BitmapImage)Img.Source;
+            //_bitmap = (BitmapImage)Img.Source;
 
-            // Set scale to the minimum, and then save it. 
-            _scale = 0;
-            CoerceScale(true);
-            _scale = _coercedScale;
+            //// Set scale to the minimum, and then save it. 
+            //_scale = 0;
+            //CoerceScale(true);
+            //_scale = _coercedScale;
 
-            ResizeImage(true);
+            //ResizeImage(true);
         }
 
-        #region try1
+        #region try1 zoom
 
         void Img_ManipulationDelta(object sender, System.Windows.Input.ManipulationDeltaEventArgs e)
         {
@@ -180,7 +351,7 @@ namespace WordPicCreator
 
         #endregion try1
 
-        #region newcode
+        #region newcode for zoom
 
         const double MaxScale = 100;
 
@@ -202,13 +373,13 @@ namespace WordPicCreator
         /// </summary> 
         void viewport_ViewportChanged(object sender, System.Windows.Controls.Primitives.ViewportChangedEventArgs e)
         {
-            Size newSize = new Size(viewport.Viewport.Width, viewport.Viewport.Height);
-            if (newSize != _viewportSize)
-            {
-                _viewportSize = newSize;
-                CoerceScale(true);
-                ResizeImage(false);
-            }
+            //Size newSize = new Size(viewport.Viewport.Width, viewport.Viewport.Height);
+            //if (newSize != _viewportSize)
+            //{
+            //    _viewportSize = newSize;
+            //    CoerceScale(true);
+            //    ResizeImage(false);
+            //}
         }
 
         /// <summary> 
@@ -229,30 +400,30 @@ namespace WordPicCreator
         /// <param name="e"></param> 
         void OnManipulationDelta(object sender, ManipulationDeltaEventArgs e)
         {
-            if (e.PinchManipulation != null)
-            {
-                e.Handled = true;
+            //if (e.PinchManipulation != null)
+            //{
+            //    e.Handled = true;
 
-                if (!_pinching)
-                {
-                    _pinching = true;
-                    Point center = e.PinchManipulation.Original.Center;
-                    _relativeMidpoint = new Point(center.X / Img.ActualWidth, center.Y / Img.ActualHeight);
+            //    if (!_pinching)
+            //    {
+            //        _pinching = true;
+            //        Point center = e.PinchManipulation.Original.Center;
+            //        _relativeMidpoint = new Point(center.X / Img.ActualWidth, center.Y / Img.ActualHeight);
 
-                    var xform = Img.TransformToVisual(viewport);
-                    _screenMidpoint = xform.Transform(center);
-                }
+            //        var xform = Img.TransformToVisual(viewport);
+            //        _screenMidpoint = xform.Transform(center);
+            //    }
 
-                _scale = _originalScale * e.PinchManipulation.CumulativeScale;
+            //    _scale = _originalScale * e.PinchManipulation.CumulativeScale;
 
-                CoerceScale(false);
-                ResizeImage(false);
-            }
-            else if (_pinching)
-            {
-                _pinching = false;
-                _originalScale = _scale = _coercedScale;
-            }
+            //    CoerceScale(false);
+            //    ResizeImage(false);
+            //}
+            //else if (_pinching)
+            //{
+            //    _pinching = false;
+            //    _originalScale = _scale = _coercedScale;
+            //}
         }
 
         /// <summary> 
@@ -290,30 +461,30 @@ namespace WordPicCreator
         /// <param name="center"></param> 
         void ResizeImage(bool center)
         {
-            if (_coercedScale != 0 && _bitmap != null)
-            {
-                double newWidth = canvas.Width = Math.Round(_bitmap.PixelWidth * _coercedScale);
-                double newHeight = canvas.Height = Math.Round(_bitmap.PixelHeight * _coercedScale);
+            //if (_coercedScale != 0 && _bitmap != null)
+            //{
+            //    double newWidth = canvas.Width = Math.Round(_bitmap.PixelWidth * _coercedScale);
+            //    double newHeight = canvas.Height = Math.Round(_bitmap.PixelHeight * _coercedScale);
 
-                xform.ScaleX = xform.ScaleY = _coercedScale;
+            //    xform.ScaleX = xform.ScaleY = _coercedScale;
 
-                viewport.Bounds = new Rect(0, 0, newWidth, newHeight);
+            //    viewport.Bounds = new Rect(0, 0, newWidth, newHeight);
 
-                if (center)
-                {
-                    viewport.SetViewportOrigin(
-                        new Point(
-                            Math.Round((newWidth - viewport.ActualWidth) / 2),
-                            Math.Round((newHeight - viewport.ActualHeight) / 2)
-                            ));
-                }
-                else
-                {
-                    Point newImgMid = new Point(newWidth * _relativeMidpoint.X, newHeight * _relativeMidpoint.Y);
-                    Point origin = new Point(newImgMid.X - _screenMidpoint.X, newImgMid.Y - _screenMidpoint.Y);
-                    viewport.SetViewportOrigin(origin);
-                }
-            }
+            //    if (center)
+            //    {
+            //        viewport.SetViewportOrigin(
+            //            new Point(
+            //                Math.Round((newWidth - viewport.ActualWidth) / 2),
+            //                Math.Round((newHeight - viewport.ActualHeight) / 2)
+            //                ));
+            //    }
+            //    else
+            //    {
+            //        Point newImgMid = new Point(newWidth * _relativeMidpoint.X, newHeight * _relativeMidpoint.Y);
+            //        Point origin = new Point(newImgMid.X - _screenMidpoint.X, newImgMid.Y - _screenMidpoint.Y);
+            //        viewport.SetViewportOrigin(origin);
+            //    }
+            //}
         }
 
         /// <summary> 
@@ -324,52 +495,20 @@ namespace WordPicCreator
         /// <param name="recompute">Will recompute the min max scale if true.</param> 
         void CoerceScale(bool recompute)
         {
-            if (recompute && _bitmap != null && viewport != null)
-            {
-                // Calculate the minimum scale to fit the viewport 
-                double minX = viewport.ActualWidth / _bitmap.PixelWidth;
-                double minY = viewport.ActualHeight / _bitmap.PixelHeight;
+            //if (recompute && _bitmap != null && viewport != null)
+            //{
+            //    // Calculate the minimum scale to fit the viewport 
+            //    double minX = viewport.ActualWidth / _bitmap.PixelWidth;
+            //    double minY = viewport.ActualHeight / _bitmap.PixelHeight;
 
-                _minScale = Math.Min(minX, minY);
-            }
+            //    _minScale = Math.Min(minX, minY);
+            //}
 
-            _coercedScale = Math.Min(MaxScale, Math.Max(_scale, _minScale));
+            //_coercedScale = Math.Min(MaxScale, Math.Max(_scale, _minScale));
 
         }
 
         #endregion newcode
-
-        void CnVas_Tap(object sender, System.Windows.Input.GestureEventArgs e)
-        {
-            if (_textBoxesOnScreen.Count() == 0)
-            {
-                Point tappedAt = e.GetPosition(null);
-                _leftOfTextBox = (_orientation == PageOrientation.Portrait) ? tappedAt.X : tappedAt.Y;
-
-                TextBox txtbox = GetNewTextBox();
-
-                if (_orientation == PageOrientation.Portrait)
-                {
-                    _originX = tappedAt.X;
-                    _originY = tappedAt.Y;
-                    Canvas.SetLeft(txtbox, tappedAt.X);
-                    Canvas.SetTop(txtbox, tappedAt.Y);
-                }
-                else
-                {
-                    _originX = tappedAt.X;
-                    _originY = tappedAt.Y;
-                    Canvas.SetLeft(txtbox, _originX);
-                    Canvas.SetTop(txtbox, _originY);
-                }
-
-                txtbox.KeyDown += txtbox_KeyDown;
-                _textBoxesOnScreen.Add(txtbox);
-                canvas.Children.Add(txtbox);
-
-                txtbox.Focus();
-            }
-        }
 
         protected override void OnNavigatedTo(NavigationEventArgs e)
         {
@@ -379,89 +518,21 @@ namespace WordPicCreator
             {
                 if (_textBoxesOnScreen.Count() > 0)
                 {
-                    foreach (var row in _textBoxesOnScreen)
+                    foreach (var row in _textBoxesOnScreen.Keys)
                     {
-                        row.FontFamily = GetFontFamily();
-                        row.FontSize = GetFontSize();
-                        row.Foreground = GetFontColor();
-                        row.FontWeight = GetFontWeight();
-                        row.FontStyle = GetFontStyle();
+                        _textBoxesOnScreen[row].TextBoxControl.FontFamily = GetFontFamily();
+                        _textBoxesOnScreen[row].TextBoxControl.FontSize = GetFontSize();
+                        _textBoxesOnScreen[row].TextBoxControl.Foreground = GetFontColor();
+                        _textBoxesOnScreen[row].TextBoxControl.FontWeight = GetFontWeight();
+                        _textBoxesOnScreen[row].TextBoxControl.FontStyle = GetFontStyle();
                     }
                 }
             }
         }
 
-        List<TextBox> _textBoxesOnScreen = new List<TextBox>();
-
-        void Img_Tap(object sender, System.Windows.Input.GestureEventArgs e)
-        {
-
-        }
-
-        private TextBox GetNewTextBox()
-        {
-            TextBox returnValue = new TextBox();
-
-            returnValue.FontFamily = GetFontFamily();
-            returnValue.FontSize = GetFontSize();
-            returnValue.Foreground = GetFontColor();
-            returnValue.FontWeight = GetFontWeight();
-            returnValue.FontStyle = GetFontStyle();
-            returnValue.ManipulationDelta += returnValue_ManipulationDelta;
-            returnValue.TextWrapping = TextWrapping.Wrap;
-            returnValue.MaxWidth = _orientation == PageOrientation.Portrait ? _screenWidth - _leftOfTextBox : _screenHeight - _leftOfTextBox;
-            returnValue.LostFocus += returnValue_LostFocus;
-            returnValue.GotFocus += returnValue_GotFocus;
-            returnValue.Name = "Caption";
-
-            return returnValue;
-        }
-
         private void returnValue_GotFocus(object sender, RoutedEventArgs e)
         {
             _saveButton.IsEnabled = false;
-        }
-
-        private void returnValue_LostFocus(object sender, RoutedEventArgs e)
-        {
-            if (_textBoxesOnScreen.Count() > 0)
-            {
-                if (_textBoxesOnScreen[0].Text == null)
-                {
-                    ClearTextBoxes();
-                }
-                else if (_textBoxesOnScreen[0].Text == string.Empty)
-                {
-                    ClearTextBoxes();
-                }
-                else
-                {
-                    _saveButton.IsEnabled = true;
-                }
-            }
-        }
-
-        private void txtbox_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
-        {
-            if (e.Key == System.Windows.Input.Key.Enter)
-            {
-                this.Focus();
-            }
-            else
-            {
-                _deleteTextBlockButton.IsEnabled = true;
-            }
-        }
-
-        void returnValue_ManipulationDelta(object sender, System.Windows.Input.ManipulationDeltaEventArgs e)
-        {
-            Point manOrigin = e.ManipulationOrigin;
-
-            Canvas.SetLeft(_textBoxesOnScreen[0], _originX + manOrigin.X);
-            Canvas.SetTop(_textBoxesOnScreen[0], _originY + manOrigin.Y);
-
-            _originX = _originX + manOrigin.X;
-            _originY = _originY + manOrigin.Y;
         }
 
         private bool _imageMovingMode = false;
@@ -522,9 +593,14 @@ namespace WordPicCreator
             {
                 BitmapImage image = new BitmapImage();
                 image.SetSource(e.ChosenPhoto);
+                _originalImage = image;
 
                 _widthOfPhoto = image.PixelWidth;
                 _heightOfPhoto = image.PixelHeight;
+
+                //Change Img Width to new ratio
+                //Img.Width = (_screenWidth / image.PixelWidth) * image.PixelWidth;
+                //Img.Height = (_screenHeight / image.PixelHeight) * image.PixelHeight;
 
                 Img.Source = image;
             }
@@ -538,16 +614,20 @@ namespace WordPicCreator
         private string GetFileName()
         {
             string returnValue = "WordPic";
+            int pictureNumber;
 
             if (IS.GetSetting(FILE_NUMBER) == null)
             {
-                returnValue = returnValue + 1;
+                pictureNumber = 1;
+                returnValue = returnValue + pictureNumber;
             }
             else
             {
-                returnValue = returnValue + ((int)IS.GetSetting(FILE_NUMBER) + 1);
-                IS.SaveSetting(FILE_NUMBER, (int)IS.GetSetting(FILE_NUMBER) + 1);
+                pictureNumber = (int)IS.GetSetting(FILE_NUMBER) + 1;
+                returnValue = returnValue + pictureNumber;
             }
+
+            IS.SaveSetting(FILE_NUMBER, pictureNumber);
 
             return returnValue;
         }
@@ -630,8 +710,83 @@ namespace WordPicCreator
         {
             this.Focus();
 
-            var bitmap = new WriteableBitmap(Convert.ToInt32(Img.Width), Convert.ToInt32(Img.Height));
-            //bitmap.Render(CnVas, null);
+            //create a canvas the size of the original picture
+            Canvas canvasToSave = new Canvas();
+            canvasToSave.Width = _widthOfPhoto;
+            canvasToSave.Height = _heightOfPhoto;
+            Image picture = new Image();
+            picture.Source = _originalImage;
+            picture.Width = _widthOfPhoto;
+            picture.Height = _heightOfPhoto;
+
+            canvasToSave.Children.Add(picture);
+
+
+            //find percentage of X in relation to old canvas
+            double widthMultiplier = _widthOfPhoto / Img.ActualWidth;
+            double heightMultiplier = _heightOfPhoto / Img.ActualHeight;
+
+            try
+            {
+                //figure out where to put the textblocks on the new canvas
+                foreach (var row in _textBoxesOnScreen.Keys)
+                {
+                    TransformGroup group = new TransformGroup();
+                    ScaleTransform transform = new ScaleTransform();
+                    double multiplierToUse;
+
+                    if (widthMultiplier > heightMultiplier)
+                    {
+                        multiplierToUse = widthMultiplier;
+                    }
+                    else
+                    {
+                        multiplierToUse = heightMultiplier;
+                    }
+
+                    transform.ScaleX = widthMultiplier;
+                    transform.ScaleY = widthMultiplier;
+                    group.Children.Add(transform);
+
+                    TextBlock newTextBox = new TextBlock();
+                    newTextBox.FontFamily = _textBoxesOnScreen[row].TextBoxControl.FontFamily;
+                    newTextBox.FontSize = _textBoxesOnScreen[row].TextBoxControl.FontSize;
+                    newTextBox.Foreground = _textBoxesOnScreen[row].TextBoxControl.Foreground;
+                    newTextBox.FontWeight = _textBoxesOnScreen[row].TextBoxControl.FontWeight;
+                    newTextBox.FontStyle = _textBoxesOnScreen[row].TextBoxControl.FontStyle;
+                    newTextBox.Text = _textBoxesOnScreen[row].TextBoxControl.Text;
+                    newTextBox.RenderTransform = group;
+
+                    canvasToSave.Children.Add(newTextBox);
+
+                    //Where to place the textblock on the height (Y) of the photo
+                    Decimal heightOfPictureAsDisplayedToUser = Convert.ToDecimal(_screenWidth) / (Convert.ToDecimal(_widthOfPhoto) / Convert.ToDecimal(_heightOfPhoto));
+                    double pixelsAtTopAndBottomOfPicture = Convert.ToDouble((Convert.ToDecimal(_screenHeight) - heightOfPictureAsDisplayedToUser) / 2);
+                    double whereTextBlockIsOnPictureY = (_textBoxesOnScreen[row].OriginY + (_textBoxesOnScreen[row].TextBoxControl.ActualHeight / 2)) - (pixelsAtTopAndBottomOfPicture); //space at top of pciture
+                    double percentageIntoPictureY = Convert.ToDouble(Convert.ToDecimal(whereTextBlockIsOnPictureY) / Convert.ToDecimal(heightOfPictureAsDisplayedToUser));
+                    double pixelsIntoPictureY = (percentageIntoPictureY * _heightOfPhoto) - _textBoxesOnScreen[row].TextBoxControl.ActualHeight * 2;
+
+                    //Where to place the textblock on the width (X) of the photo
+                    Decimal percentageX = Convert.ToDecimal(_textBoxesOnScreen[row].OriginX) / Convert.ToDecimal(_screenWidth);
+                    double pixelsIntoPictureX = Convert.ToDouble(percentageX * _widthOfPhoto) + (_textBoxesOnScreen[row].TextBoxControl.ActualWidth / 2);
+
+
+                    //For now, just set it in the center
+                    Canvas.SetLeft(newTextBox, pixelsIntoPictureX);
+                    Canvas.SetTop(newTextBox, pixelsIntoPictureY);
+
+                    this.Focus();
+                }
+            }
+            catch (Exception ex)
+            {
+
+            }
+
+            //add the picture to the canvas
+
+            var bitmap = new WriteableBitmap(Convert.ToInt32(canvasToSave.Width), Convert.ToInt32(canvasToSave.Height));
+            bitmap.Render(canvasToSave, null);
             bitmap.Invalidate();
 
             String tempJPEG = "logo.jpg";
@@ -676,6 +831,32 @@ namespace WordPicCreator
             }
 
             _userHasSavedChanges = true;
+            _saveButton.IsEnabled = false;
+        }
+
+        private double GetTopOfPicturePixels()
+        {
+            double topOfPicturePixels = 0;
+
+            double ratio = Convert.ToDouble(_screenHeight) / Convert.ToDouble(_originalImage.PixelHeight);
+            double pictureHeight = Img.ActualHeight * ratio;
+
+            topOfPicturePixels = ((_screenHeight - pictureHeight) / 2);
+
+            return topOfPicturePixels;
+        }
+
+        private double GetActualPictureHeight()
+        {
+            double heightOfPictureInPixels = 0;
+
+            double ratio = Convert.ToDouble(_screenHeight) / Convert.ToDouble(_originalImage.PixelHeight);
+
+            double pictureHeight = Img.ActualHeight * ratio;
+
+            heightOfPictureInPixels = _screenHeight - pictureHeight;
+
+            return heightOfPictureInPixels;
         }
 
         void selectNewPictureButton_Click(object sender, EventArgs e)
@@ -699,44 +880,40 @@ namespace WordPicCreator
             LoadPhotosFromLibrary();
         }
 
-        private void ClearTextBoxes()
-        {
-            //if (CnVas.Children.Count() > 0)
-            //{
-            //    for (int i = 0; i <= CnVas.Children.Count() - 1; i++)
-            //    {
-            //        TextBox t = CnVas.Children[i] as TextBox;
-
-            //        if (t != null)
-            //        {
-            //            CnVas.Children.Remove(CnVas.Children[i]);
-            //        }
-            //    }
-            //}
-
-            _textBoxesOnScreen.Clear();
-            _deleteTextBlockButton.IsEnabled = false;
-            _saveButton.IsEnabled = false;
-        }
-
         private PageOrientation _orientation;
 
         private void PhoneOrientationChanged(object sender, OrientationChangedEventArgs e)
         {
-            if (e.Orientation == PageOrientation.Landscape || e.Orientation == PageOrientation.LandscapeLeft || e.Orientation == PageOrientation.LandscapeRight)
-            {
-                Img.Width = _screenHeight;
-                Img.Height = _screenWidth;
+            //if (e.Orientation == PageOrientation.Landscape || e.Orientation == PageOrientation.LandscapeLeft || e.Orientation == PageOrientation.LandscapeRight)
+            //{
+            //    Img.Width = _screenHeight;
+            //    Img.Height = _screenWidth;
 
-                _orientation = PageOrientation.Landscape;
-            }
-            else
-            {
-                Img.Width = _screenWidth;
-                Img.Height = _screenHeight;
+            //    _orientation = PageOrientation.Landscape;
+            //}
+            //else
+            //{
+            //    Img.Width = _screenWidth;
+            //    Img.Height = _screenHeight;
 
-                _orientation = PageOrientation.Portrait;
-            }
+            //    _orientation = PageOrientation.Portrait;
+            //}
         }
+    }
+
+    public class TextBoxInformation
+    {
+        public TextBoxInformation(TextBox textBox, double originX, double originY)
+        {
+            TextBoxControl = textBox;
+            OriginX = originX;
+            OriginY = originY;
+        }
+
+        public TextBox TextBoxControl { get; set; }
+
+        public double OriginX { get; set; }
+
+        public double OriginY { get; set; }
     }
 }
